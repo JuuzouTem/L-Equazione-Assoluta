@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>L'Equazione Assoluta</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400;1,500;1,600&family=EB+Garamond:ital,wght@0,400;0,500;1,400;1,500&family=Cinzel:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── TOKENS ───────────────────────────────────────────────────── */
+    :root {
+      --navy:    #0a0e1a;
+      --navy2:   #111827;
+      --wine:    #6b1a2a;
+      --wine2:   #8b2340;
+      --gold:    #c9a84c;
+      --gold2:   #e8c86d;
+      --cream:   #f0e6d0;
+      --ghost:   rgba(240,230,208,0.08);
+      --border:  rgba(201,168,76,0.25);
+      --t-slow:  1.4s cubic-bezier(.4,0,.2,1);
+      --t-med:   0.7s cubic-bezier(.4,0,.2,1);
+    }
+
+    /* ─── RESET ────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; scroll-behavior: smooth; }
+
+    body {
+      background: var(--navy);
+      color: var(--cream);
+      font-family: 'EB Garamond', Georgia, serif;
+      min-height: 100dvh;
+      overflow-x: hidden;
+    }
+
+    /* ─── CANVAS STARS ─────────────────────────────────────────────── */
+    #starCanvas {
+      position: fixed; inset: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ─── GRAIN OVERLAY ────────────────────────────────────────────── */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+      background-size: 200px;
+      pointer-events: none;
+      z-index: 1;
+      opacity: 0.5;
+    }
+
+    /* ─── SECTION BASE ─────────────────────────────────────────────── */
+    .section {
+      position: fixed; inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      transition: opacity var(--t-slow), visibility var(--t-slow);
+    }
+    .section.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+    /* ═══════════════════════════════════════════════════════════════ */
+    /*  BÖLÜM 1 — BEKLEME EKRANI                                      */
+    /* ═══════════════════════════════════════════════════════════════ */
+    #waiting {
+      text-align: center;
+      padding: 2rem;
+    }
+
+    .ornament {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(0.55rem, 1.5vw, 0.75rem);
+      letter-spacing: 0.5em;
+      color: var(--gold);
+      opacity: 0.6;
+      margin-bottom: 2.5rem;
+      animation: fadeSlideDown 2s ease both;
+    }
+
+    /* decorative line */
+    .deco-line {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      justify-content: center;
+      margin-bottom: 3rem;
+      animation: fadeSlideDown 2s .3s ease both;
+    }
+    .deco-line span {
+      height: 1px;
+      width: clamp(40px, 10vw, 100px);
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    }
+    .deco-line i {
+      font-style: normal;
+      color: var(--gold);
+      font-size: 1rem;
+      opacity: .7;
+    }
+
+    /* countdown */
+    #countdown {
+      display: flex;
+      gap: clamp(1rem, 4vw, 3rem);
+      align-items: flex-end;
+      justify-content: center;
+      margin-bottom: 2.5rem;
+      animation: fadeSlideDown 2s .5s ease both;
+    }
+    .time-block { display: flex; flex-direction: column; align-items: center; }
+    .time-num {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(3.5rem, 12vw, 7rem);
+      font-weight: 300;
+      line-height: 1;
+      color: var(--cream);
+      letter-spacing: -0.02em;
+      text-shadow: 0 0 40px rgba(201,168,76,.3), 0 0 80px rgba(201,168,76,.1);
+      transition: transform .15s ease, text-shadow .15s ease;
+    }
+    .time-num.tick {
+      transform: scale(1.04);
+      text-shadow: 0 0 60px rgba(201,168,76,.6), 0 0 120px rgba(201,168,76,.2);
+    }
+    .time-label {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(0.45rem, 1.2vw, 0.6rem);
+      letter-spacing: 0.4em;
+      color: var(--gold);
+      opacity: 0.5;
+      margin-top: 0.5rem;
+    }
+    .colon {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(3rem, 10vw, 6rem);
+      font-weight: 300;
+      color: var(--gold);
+      opacity: 0.4;
+      margin-bottom: 0.3rem;
+      animation: blink 2s step-start infinite;
+    }
+    @keyframes blink { 50% { opacity: 0.1; } }
+
+    .subtitle {
+      font-family: 'EB Garamond', serif;
+      font-style: italic;
+      font-size: clamp(0.85rem, 2.2vw, 1.05rem);
+      color: var(--cream);
+      opacity: 0.5;
+      letter-spacing: 0.05em;
+      line-height: 1.8;
+      animation: fadeSlideDown 2s .8s ease both;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════ */
+    /*  BÖLÜM 2 — ANA EKRAN                                           */
+    /* ═══════════════════════════════════════════════════════════════ */
+    #main {
+      position: fixed; inset: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: clamp(3rem, 8vh, 6rem) clamp(1rem, 5vw, 3rem) 4rem;
+    }
+    #main.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+    /* header */
+    .main-header {
+      text-align: center;
+      margin-bottom: clamp(3rem, 7vh, 5rem);
+      opacity: 0;
+      transform: translateY(30px);
+      transition: opacity 1.6s .4s ease, transform 1.6s .4s ease;
+    }
+    .main-header.visible { opacity: 1; transform: translateY(0); }
+
+    .eyebrow {
+      font-family: 'Cinzel', serif;
+      font-size: clamp(0.5rem, 1.4vw, 0.65rem);
+      letter-spacing: 0.6em;
+      color: var(--gold);
+      opacity: 0.6;
+      margin-bottom: 1.2rem;
+    }
+    .main-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: clamp(2.4rem, 8vw, 5.5rem);
+      line-height: 1;
+      color: var(--cream);
+      letter-spacing: 0.04em;
+      text-shadow: 0 0 80px rgba(201,168,76,.25);
+    }
+    .main-subtitle {
+      font-family: 'EB Garamond', serif;
+      font-style: italic;
+      font-size: clamp(0.95rem, 2.4vw, 1.15rem);
+      color: var(--gold);
+      opacity: 0.7;
+      margin-top: 0.8rem;
+      letter-spacing: 0.06em;
+    }
+    .header-rule {
+      display: flex; align-items: center; gap: 1rem; justify-content: center;
+      margin-top: 1.8rem;
+    }
+    .header-rule span {
+      height: 1px; flex: 1; max-width: 120px;
+      background: linear-gradient(90deg, transparent, var(--gold), transparent);
+    }
+    .header-rule em {
+      font-style: normal; color: var(--gold); font-size: 0.8rem; opacity: .6;
+    }
+
+    /* cards container */
+    .cards {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+      width: 100%;
+      max-width: 780px;
+    }
+
+    /* ─── TEOREM KARTI ─────────────────────────────────────────────── */
+    .card {
+      background: linear-gradient(135deg, rgba(17,24,39,.95) 0%, rgba(10,14,26,.98) 100%);
+      border: 1px solid var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+      cursor: pointer;
+      opacity: 0;
+      transform: translateY(40px);
+      transition:
+        opacity 1s ease,
+        transform 1s ease,
+        border-color .4s ease,
+        box-shadow .4s ease;
+      box-shadow: 0 4px 30px rgba(0,0,0,.4);
+    }
+    .card.visible { opacity: 1; transform: translateY(0); }
+    .card:hover {
+      border-color: rgba(201,168,76,.5);
+      box-shadow: 0 8px 50px rgba(201,168,76,.08), 0 2px 8px rgba(0,0,0,.5);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.5rem 1.8rem;
+      user-select: none;
+    }
+    .card-meta {
+      display: flex; align-items: center; gap: 1rem;
+    }
+    .card-num {
+      font-family: 'Cinzel', serif;
+      font-size: 0.6rem;
+      letter-spacing: 0.4em;
+      color: var(--gold);
+      opacity: 0.5;
+      padding: 0.3rem 0.6rem;
+      border: 1px solid rgba(201,168,76,.2);
+    }
+    .card-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(1rem, 3vw, 1.35rem);
+      font-weight: 400;
+      color: var(--cream);
+      letter-spacing: 0.02em;
+    }
+    .card-sub {
+      font-family: 'EB Garamond', serif;
+      font-style: italic;
+      font-size: clamp(0.75rem, 1.8vw, 0.875rem);
+      color: var(--gold);
+      opacity: 0.55;
+      margin-top: 0.2rem;
+    }
+    .card-arrow {
+      color: var(--gold);
+      opacity: 0.4;
+      font-size: 1.1rem;
+      transition: transform var(--t-med), opacity .3s;
+      flex-shrink: 0;
+    }
+    .card.open .card-arrow { transform: rotate(180deg); opacity: 0.8; }
+
+    .card-body {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 1s cubic-bezier(.4,0,.2,1);
+    }
+    .card.open .card-body { max-height: 1200px; }
+
+    .card-inner {
+      padding: 0 1.8rem 2rem;
+      border-top: 1px solid rgba(201,168,76,.1);
+    }
+    .card-text {
+      font-family: 'EB Garamond', serif;
+      font-size: clamp(1rem, 2.6vw, 1.15rem);
+      line-height: 1.9;
+      color: var(--cream);
+      opacity: 0.85;
+      margin: 1.5rem 0 1.8rem;
+      font-style: italic;
+    }
+
+    /* ─── KART 1: Olasılık Simülatörü ─────────────────────────────── */
+    #probabilityCanvas {
+      width: 100%;
+      height: 200px;
+      border-radius: 2px;
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(201,168,76,.1);
+      display: block;
+      margin-bottom: 1.2rem;
+    }
+
+    /* ─── KART 2: Dalga Tuvali ─────────────────────────────────────── */
+    #gravityCanvas {
+      width: 100%;
+      height: 220px;
+      border-radius: 2px;
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(201,168,76,.1);
+      display: block;
+      margin-bottom: 1.2rem;
+      cursor: crosshair;
+      touch-action: none;
+    }
+    .gravity-hint {
+      font-family: 'Cinzel', serif;
+      font-size: 0.55rem;
+      letter-spacing: 0.35em;
+      color: var(--gold);
+      opacity: 0.4;
+      text-align: center;
+      margin-top: -0.6rem;
+      margin-bottom: 0.5rem;
+    }
+
+    /* ─── KART 3: Final Sınavı ─────────────────────────────────────── */
+    .exam-question {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(1rem, 2.5vw, 1.15rem);
+      font-weight: 400;
+      line-height: 1.85;
+      color: var(--cream);
+      opacity: 0.9;
+      margin: 1.5rem 0 1.8rem;
+      padding: 1.2rem 1.4rem;
+      border-left: 2px solid var(--wine2);
+      background: rgba(107,26,42,.08);
+    }
+    .exam-input-wrap {
+      display: flex; gap: 0.8rem; flex-wrap: wrap;
+    }
+    .exam-input {
+      flex: 1; min-width: 0;
+      background: rgba(255,255,255,.04);
+      border: 1px solid rgba(201,168,76,.2);
+      border-radius: 1px;
+      color: var(--cream);
+      font-family: 'EB Garamond', serif;
+      font-size: 1rem;
+      padding: 0.75rem 1rem;
+      outline: none;
+      transition: border-color .3s, background .3s;
+    }
+    .exam-input:focus {
+      border-color: var(--gold);
+      background: rgba(201,168,76,.06);
+    }
+    .exam-input::placeholder { color: rgba(240,230,208,.3); font-style: italic; }
+
+    /* ─── SHARED BUTTON ─────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 0.5rem;
+      padding: 0.7rem 1.6rem;
+      background: transparent;
+      border: 1px solid rgba(201,168,76,.4);
+      color: var(--gold);
+      font-family: 'Cinzel', serif;
+      font-size: clamp(0.5rem, 1.4vw, 0.65rem);
+      letter-spacing: 0.35em;
+      cursor: pointer;
+      transition: background .3s, border-color .3s, color .3s, transform .2s;
+    }
+    .btn:hover, .btn:focus-visible {
+      background: rgba(201,168,76,.1);
+      border-color: var(--gold);
+      color: var(--cream);
+      transform: translateY(-1px);
+    }
+    .btn:active { transform: translateY(0); }
+
+    /* ─── FINAL OVERLAY ─────────────────────────────────────────────── */
+    #finalOverlay {
+      position: fixed; inset: 0;
+      background: #000;
+      z-index: 100;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 2rem;
+      text-align: center;
+      opacity: 0; visibility: hidden;
+      transition: opacity 1.4s ease, visibility 1.4s ease;
+    }
+    #finalOverlay.visible { opacity: 1; visibility: visible; }
+
+    .final-label {
+      font-family: 'Cinzel', serif;
+      font-size: 0.6rem;
+      letter-spacing: 0.6em;
+      color: var(--gold);
+      opacity: 0;
+      margin-bottom: 2rem;
+      transition: opacity 1s 1s ease;
+    }
+    #finalOverlay.visible .final-label { opacity: 0.6; }
+
+    .final-text {
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: clamp(1.4rem, 5vw, 2.4rem);
+      line-height: 1.65;
+      color: var(--cream);
+      max-width: 680px;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 1.2s 1.5s ease, transform 1.2s 1.5s ease;
+    }
+    #finalOverlay.visible .final-text { opacity: 1; transform: translateY(0); }
+    .final-text em {
+      color: var(--wine2);
+      font-style: italic;
+    }
+    .final-text strong {
+      color: var(--gold2);
+      font-weight: 500;
+    }
+    .final-close {
+      margin-top: 3rem;
+      opacity: 0;
+      transition: opacity 1s 3s ease;
+    }
+    #finalOverlay.visible .final-close { opacity: 1; }
+
+    /* ─── KEYFRAMES ─────────────────────────────────────────────────── */
+    @keyframes fadeSlideDown {
+      from { opacity: 0; transform: translateY(-18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; } to { opacity: 1; }
+    }
+
+    /* ─── SCROLLBAR ─────────────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--navy); }
+    ::-webkit-scrollbar-thumb { background: rgba(201,168,76,.25); border-radius: 2px; }
+
+    /* ─── MOBILE TWEAKS ─────────────────────────────────────────────── */
+    @media (max-width: 500px) {
+      .card-header { padding: 1.2rem 1.2rem; }
+      .card-inner  { padding: 0 1.2rem 1.6rem; }
+      .exam-input-wrap { flex-direction: column; }
+      .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="starCanvas"></canvas>
+
+<!-- ══ BÖLÜM 1: BEKLEME EKRANI ══════════════════════════════════════ -->
+<section id="waiting" class="section">
+  <div class="ornament">✦ &nbsp;&nbsp; L ' E Q U A Z I O N E &nbsp;&nbsp; ✦</div>
+  <div class="deco-line"><span></span><i>✦</i><span></span></div>
+  <div id="countdown">
+    <div class="time-block">
+      <span class="time-num" id="cd-h">00</span>
+      <span class="time-label">SAAT</span>
+    </div>
+    <div class="colon">:</div>
+    <div class="time-block">
+      <span class="time-num" id="cd-m">00</span>
+      <span class="time-label">DAKİKA</span>
+    </div>
+    <div class="colon">:</div>
+    <div class="time-block">
+      <span class="time-num" id="cd-s">00</span>
+      <span class="time-label">SANİYE</span>
+    </div>
+  </div>
+  <p class="subtitle">
+    Calcolando le coordinate della nostra collisione…<br>
+    Çarpışmamızın kesin koordinatları hesaplanıyor…
+  </p>
+</section>
+
+<!-- ══ BÖLÜM 2: ANA EKRAN ════════════════════════════════════════════ -->
+<div id="main" class="hidden">
+
+  <header class="main-header">
+    <p class="eyebrow">T E O R E M A &nbsp;&nbsp; F I N A L E</p>
+    <h1 class="main-title">L'Equazione Assoluta</h1>
+    <p class="main-subtitle">Mutlak Denklem</p>
+    <div class="header-rule"><span></span><em>∞</em><span></span></div>
+  </header>
+
+  <div class="cards">
+
+    <!-- KART 1 -->
+    <div class="card" id="card1" onclick="toggleCard(this)">
+      <div class="card-header">
+        <div class="card-meta">
+          <span class="card-num">I</span>
+          <div>
+            <div class="card-title">Olasılık Teoremi</div>
+            <div class="card-sub">Teorema della Probabilità</div>
+          </div>
+        </div>
+        <span class="card-arrow">▾</span>
+      </div>
+      <div class="card-body">
+        <div class="card-inner">
+          <canvas id="probabilityCanvas"></canvas>
+          <p class="card-text">
+            Milyarlarca insanın yaşadığı bir çağda, zihni bu kadar karmaşık, ruhu bu kadar yorgun iki insanın bir fuar kalabalığında birbirini bulma olasılığı matematiksel olarak sıfıra yakındır. Ama sen istatistikleri yok ettin. Matematiğin açıklayamadığı tek anomali, bana ilk dokunduğun andı.
+          </p>
+          <button class="btn" onclick="runProbability(event)">
+            OLASILIĞI YENİDEN HESAPLA
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- KART 2 -->
+    <div class="card" id="card2" onclick="toggleCard(this)">
+      <div class="card-header">
+        <div class="card-meta">
+          <span class="card-num">II</span>
+          <div>
+            <div class="card-title">Kütle Çekim Kanunu</div>
+            <div class="card-sub">Legge di Gravitazione</div>
+          </div>
+        </div>
+        <span class="card-arrow">▾</span>
+      </div>
+      <div class="card-body">
+        <div class="card-inner">
+          <p class="card-text">
+            Cisimler kütleleriyle orantılı olarak birbirini çekerler. Fakat bilimin atladığı bir şey var: Bazı ruhlar, fizik kurallarını hiçe sayarak kendi çekim alanlarını yaratırlar. Tıpkı dün gece otobüs durağında, zamanı ve insanları durdurup beni kendi yörüngene hapsettiğin gibi. Artık merkezim sensin.
+          </p>
+          <canvas id="gravityCanvas"></canvas>
+          <p class="gravity-hint">DOKUN · TIKLAT · HİSSET</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- KART 3 -->
+    <div class="card" id="card3" onclick="toggleCard(this)">
+      <div class="card-header">
+        <div class="card-meta">
+          <span class="card-num">III</span>
+          <div>
+            <div class="card-title">Final Sınavı</div>
+            <div class="card-sub">L'Esame Finale</div>
+          </div>
+        </div>
+        <span class="card-arrow">▾</span>
+      </div>
+      <div class="card-body">
+        <div class="card-inner" onclick="event.stopPropagation()">
+          <p class="exam-question">
+            Matematiği boş ver. Asıl soruyu çöz: Hayatı boyunca aşktan kaçan, kendi kafesinin içinde yaşayan bir çocuk, dünyanın en güzel kızı tarafından boynundan ve belinden kavrandığında geriye ne kalır?
+          </p>
+          <div class="exam-input-wrap">
+            <input
+              id="examInput"
+              class="exam-input"
+              type="text"
+              placeholder="Cevabın…"
+              onkeydown="if(event.key==='Enter') submitExam()"
+            />
+            <button class="btn" onclick="submitExam()">GÖNDER</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ FINAL OVERLAY ════════════════════════════════════════════════ -->
+<div id="finalOverlay">
+  <p class="final-label">C E V A P</p>
+  <p class="final-text">
+    Sana tamamen teslim olmuş,<br>
+    her saniye seni öpmek için <em>kudurmakta</em> olan<br>
+    bir <strong>Behlül</strong> kalır.<br><br>
+    <em>Şimdi o ekranı kapat ve beni öp.</em>
+  </p>
+  <button class="btn final-close" onclick="closeFinal()">✦</button>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   DEVELOPER CONFIG — sadece bu satırı değiştir
+   ═══════════════════════════════════════════════════════════════════ */
+const targetDate = new Date("2026-03-04T15:30:00").getTime();
+
+/* ───────────────────────────────────────────────────────────────── */
+
+const LS_KEY = "equazione_unlocked";
+
+/* ═══ STARS ════════════════════════════════════════════════════════ */
+(function initStars() {
+  const c  = document.getElementById("starCanvas");
+  const cx = c.getContext("2d");
+  let W, H, stars = [];
+
+  function resize() {
+    W = c.width  = window.innerWidth;
+    H = c.height = window.innerHeight;
+    createStars();
+  }
+
+  function createStars() {
+    stars = Array.from({ length: 220 }, () => ({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: Math.random() * 1.2 + .2,
+      a: Math.random(),
+      da: (Math.random() * .004 + .001) * (Math.random() < .5 ? 1 : -1),
+      speed: Math.random() * .06 + .01,
+    }));
+  }
+
+  function draw() {
+    cx.clearRect(0, 0, W, H);
+    for (const s of stars) {
+      s.a = Math.max(.05, Math.min(1, s.a + s.da));
+      if (s.a <= .05 || s.a >= 1) s.da *= -1;
+      s.y -= s.speed;
+      if (s.y < -2) s.y = H + 2;
+      cx.beginPath();
+      cx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      cx.fillStyle = `rgba(240,230,208,${s.a.toFixed(2)})`;
+      cx.fill();
+    }
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener("resize", resize);
+  resize();
+  draw();
+})();
+
+/* ═══ COUNTDOWN / UNLOCK LOGIC ══════════════════════════════════════ */
+function pad2(n) { return String(n).padStart(2, "0"); }
+
+function checkUnlock() {
+  if (localStorage.getItem(LS_KEY) === "1") return true;
+  if (Date.now() >= targetDate) {
+    localStorage.setItem(LS_KEY, "1");
+    return true;
+  }
+  return false;
+}
+
+function showMain(immediate) {
+  const waiting = document.getElementById("waiting");
+  const main    = document.getElementById("main");
+
+  if (immediate) {
+    waiting.classList.add("hidden");
+    main.classList.remove("hidden");
+    triggerMainAnimations();
+    return;
+  }
+
+  waiting.style.transition = "opacity 1.8s ease, visibility 1.8s ease";
+  waiting.style.opacity = "0";
+  waiting.style.visibility = "hidden";
+  setTimeout(() => {
+    waiting.classList.add("hidden");
+    main.classList.remove("hidden");
+    triggerMainAnimations();
+  }, 1900);
+}
+
+function triggerMainAnimations() {
+  setTimeout(() => {
+    document.querySelector(".main-header").classList.add("visible");
+  }, 200);
+  document.querySelectorAll(".card").forEach((card, i) => {
+    setTimeout(() => card.classList.add("visible"), 600 + i * 300);
+  });
+  initGravityCanvas();
+  initProbabilityCanvas();
+}
+
+/* countdown tick */
+function tick() {
+  if (checkUnlock()) { showMain(false); clearInterval(timer); return; }
+  const diff = targetDate - Date.now();
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+
+  const els = [
+    { el: document.getElementById("cd-h"), val: pad2(h) },
+    { el: document.getElementById("cd-m"), val: pad2(m) },
+    { el: document.getElementById("cd-s"), val: pad2(s) },
+  ];
+  els.forEach(({ el, val }) => {
+    if (el.textContent !== val) {
+      el.textContent = val;
+      el.classList.add("tick");
+      setTimeout(() => el.classList.remove("tick"), 150);
+    }
+  });
+}
+
+let timer;
+if (checkUnlock()) {
+  document.getElementById("waiting").classList.add("hidden");
+  document.getElementById("main").classList.remove("hidden");
+  setTimeout(triggerMainAnimations, 100);
+} else {
+  tick();
+  timer = setInterval(tick, 1000);
+}
+
+/* ═══ CARD TOGGLE ════════════════════════════════════════════════════ */
+function toggleCard(card) {
+  const isOpen = card.classList.contains("open");
+  document.querySelectorAll(".card.open").forEach(c => c.classList.remove("open"));
+  if (!isOpen) {
+    card.classList.add("open");
+    if (card.id === "card2") setTimeout(initGravityCanvas, 100);
+    if (card.id === "card1") setTimeout(initProbabilityCanvas, 100);
+  }
+}
+
+/* ═══ KART 1 — OLASILIK SİMÜLATÖRÜ ══════════════════════════════════ */
+let probState = "idle"; // idle | running | final
+let probRaf;
+let dots = [];
+
+function initProbabilityCanvas() {
+  const canvas = document.getElementById("probabilityCanvas");
+  resizeCanvas(canvas);
+  if (probState === "idle") drawProbIdle(canvas);
+  if (probState === "final") drawProbFinal(canvas, true);
+}
+
+function resizeCanvas(canvas) {
+  const rect = canvas.getBoundingClientRect();
+  canvas.width  = rect.width  * window.devicePixelRatio || rect.width;
+  canvas.height = rect.height * window.devicePixelRatio || rect.height;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+}
+
+function drawProbIdle(canvas) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+
+  const count = Math.floor(W * H / 700);
+  dots = Array.from({ length: count }, () => ({
+    x: Math.random() * W,
+    y: Math.random() * H,
+    vx: (Math.random() - .5) * .4,
+    vy: (Math.random() - .5) * .4,
+    special: false,
+    opacity: Math.random() * .4 + .15,
+  }));
+
+  function animate() {
+    ctx.clearRect(0, 0, W, H);
+    dots.forEach(d => {
+      d.x += d.vx; d.y += d.vy;
+      if (d.x < 0 || d.x > W) d.vx *= -1;
+      if (d.y < 0 || d.y > H) d.vy *= -1;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, 1.5, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(180,180,200,${d.opacity})`;
+      ctx.fill();
+    });
+    if (probState === "idle") probRaf = requestAnimationFrame(animate);
+  }
+  cancelAnimationFrame(probRaf);
+  probState = "idle";
+  animate();
+}
+
+function runProbability(e) {
+  e.stopPropagation();
+  const canvas = document.getElementById("probabilityCanvas");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  cancelAnimationFrame(probRaf);
+  probState = "running";
+
+  const cx = W / 2, cy = H / 2;
+  const count = Math.floor(W * H / 700);
+
+  dots = Array.from({ length: count + 2 }, (_, i) => {
+    if (i === 0) return { x: Math.random() * W * .3 + W * .1, y: Math.random() * H, vx: .3, vy: (Math.random()-.5)*.2, special: "red",  opacity: 1, r: 4 };
+    if (i === 1) return { x: Math.random() * W * .3 + W * .6, y: Math.random() * H, vx:-.3, vy: (Math.random()-.5)*.2, special: "blue", opacity: 1, r: 4 };
+    return {
+      x: Math.random() * W, y: Math.random() * H,
+      vx: (Math.random() - .5) * .4, vy: (Math.random() - .5) * .4,
+      special: false, opacity: Math.random() * .4 + .15,
+    };
+  });
+
+  let fadeOut = 0;
+  let merged  = false;
+  let mergeT  = 0;
+
+  function animate() {
+    ctx.clearRect(0, 0, W, H);
+
+    const red  = dots.find(d => d.special === "red");
+    const blue = dots.find(d => d.special === "blue");
+    const dist = red && blue ? Math.hypot(red.x - blue.x, red.y - blue.y) : 999;
+
+    if (!merged && dist < 12) {
+      merged = true;
+    }
+
+    if (!merged) {
+      // fade out grey dots
+      fadeOut = Math.min(1, fadeOut + .008);
+      dots.forEach((d, idx) => {
+        if (!d.special) {
+          d.x += d.vx; d.y += d.vy;
+          if (d.x < 0 || d.x > W) d.vx *= -1;
+          if (d.y < 0 || d.y > H) d.vy *= -1;
+          const o = d.opacity * (1 - fadeOut);
+          if (o > .01) {
+            ctx.beginPath();
+            ctx.arc(d.x, d.y, 1.5, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(180,180,200,${o.toFixed(2)})`;
+            ctx.fill();
+          }
+        } else {
+          d.x += d.vx; d.y += d.vy;
+          if (d.x < 0 || d.x > W) d.vx *= -1;
+          if (d.y < 0 || d.y > H) d.vy *= -1;
+        }
+      });
+      // draw specials
+      if (red) {
+        ctx.beginPath(); ctx.arc(red.x, red.y, red.r, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(200,40,60,${red.opacity})`; ctx.fill();
+        ctx.shadowBlur = 12; ctx.shadowColor = "rgba(200,40,60,.6)"; ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+      if (blue) {
+        ctx.beginPath(); ctx.arc(blue.x, blue.y, blue.r, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(30,60,140,${blue.opacity})`; ctx.fill();
+        ctx.shadowBlur = 12; ctx.shadowColor = "rgba(80,120,220,.6)"; ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+      probRaf = requestAnimationFrame(animate);
+    } else {
+      mergeT += .02;
+      const mx = red.x + (blue.x - red.x) * .5;
+      const my = red.y + (blue.y - red.y) * .5;
+      const glow = Math.sin(mergeT * 3) * 10 + 20;
+      ctx.beginPath();
+      ctx.arc(mx, my, 6 + Math.sin(mergeT*2)*2, 0, Math.PI*2);
+      const grad = ctx.createRadialGradient(mx, my, 0, mx, my, glow*2);
+      grad.addColorStop(0,  "rgba(240,200,80,1)");
+      grad.addColorStop(.4, "rgba(200,60,80,.8)");
+      grad.addColorStop(1,  "rgba(30,50,120,0)");
+      ctx.fillStyle = grad;
+      ctx.shadowBlur = glow; ctx.shadowColor = "rgba(240,200,80,.8)";
+      ctx.fill(); ctx.shadowBlur = 0;
+
+      if (mergeT < 4) probRaf = requestAnimationFrame(animate);
+      else { probState = "final"; }
+    }
+  }
+  animate();
+}
+
+/* ═══ KART 2 — KÜTLE ÇEKİM DALGALARI ════════════════════════════════ */
+let ripples = [];
+let gravRaf;
+
+function initGravityCanvas() {
+  const canvas = document.getElementById("gravityCanvas");
+  if (!canvas) return;
+  resizeCanvas(canvas);
+  canvas.addEventListener("click",     createRipple);
+  canvas.addEventListener("touchstart", e => {
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect();
+    const t = e.touches[0];
+    const x = (t.clientX - r.left) / r.width  * canvas.clientWidth;
+    const y = (t.clientY - r.top)  / r.height * canvas.clientHeight;
+    addRippleAt(canvas, x, y);
+  }, { passive: false });
+  drawGravity(canvas);
+}
+
+function createRipple(e) {
+  const canvas = e.currentTarget;
+  const r = canvas.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width  * canvas.clientWidth;
+  const y = (e.clientY - r.top)  / r.height * canvas.clientHeight;
+  addRippleAt(canvas, x, y);
+}
+
+function addRippleAt(canvas, x, y) {
+  ripples.push({ x, y, r: 0, maxR: Math.max(canvas.clientWidth, canvas.clientHeight) * 1.2, t: 0 });
+  ripples.push({ x, y, r: 0, maxR: Math.max(canvas.clientWidth, canvas.clientHeight) * .7, t: 0.15, delay: .15 });
+}
+
+function drawGravity(canvas) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+
+  function animate() {
+    ctx.clearRect(0, 0, W, H);
+
+    // ambient glow background
+    const bgG = ctx.createRadialGradient(W*.5, H*.5, 0, W*.5, H*.5, Math.max(W,H)*.7);
+    bgG.addColorStop(0,  "rgba(107,26,42,.08)");
+    bgG.addColorStop(1,  "rgba(0,0,0,0)");
+    ctx.fillStyle = bgG; ctx.fillRect(0, 0, W, H);
+
+    // draw hint text if no ripples
+    if (ripples.length === 0) {
+      ctx.fillStyle = "rgba(201,168,76,.12)";
+      ctx.font = "14px 'EB Garamond'";
+      ctx.textAlign = "center";
+      ctx.fillText("✦", W/2, H/2);
+    }
+
+    ripples = ripples.filter(rip => {
+      if (rip.delay && rip.delay > 0) { rip.delay -= .016; return true; }
+      rip.r += 3.5;
+      rip.t  += .016;
+      const prog = rip.r / rip.maxR;
+      const opacity = (1 - prog) * .7;
+      if (opacity <= 0) return false;
+
+      ctx.beginPath();
+      ctx.arc(rip.x, rip.y, rip.r, 0, Math.PI*2);
+      ctx.strokeStyle = `rgba(201,168,76,${opacity.toFixed(2)})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // heart at source
+      if (prog < .3) {
+        ctx.beginPath();
+        ctx.arc(rip.x, rip.y, 4 * (1 - prog * 3), 0, Math.PI*2);
+        ctx.fillStyle = `rgba(200,60,80,${(1 - prog*3).toFixed(2)})`;
+        ctx.fill();
+      }
+      return true;
+    });
+
+    gravRaf = requestAnimationFrame(animate);
+  }
+  cancelAnimationFrame(gravRaf);
+  animate();
+}
+
+/* ═══ KART 3 — FİNAL SINAVI ══════════════════════════════════════════ */
+function submitExam() {
+  const overlay = document.getElementById("finalOverlay");
+  overlay.classList.add("visible");
+  document.body.style.overflow = "hidden";
+}
+
+function closeFinal() {
+  const overlay = document.getElementById("finalOverlay");
+  overlay.style.transition = "opacity 1s ease";
+  overlay.style.opacity = "0";
+  setTimeout(() => {
+    overlay.classList.remove("visible");
+    overlay.style.opacity = "";
+    document.body.style.overflow = "";
+  }, 1000);
+}
+
+/* prevent card toggle when interacting with inner elements */
+document.querySelectorAll(".card-inner").forEach(el => {
+  el.addEventListener("click", e => e.stopPropagation());
+});
+</script>
+</body>
+</html>
