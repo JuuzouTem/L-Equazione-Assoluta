@@ -567,7 +567,7 @@
             Cisimler kütleleriyle orantılı olarak birbirini çekerler. Fakat bilimin atladığı bir şey var: Bazı ruhlar, fizik kurallarını hiçe sayarak kendi çekim alanlarını yaratırlar. Tıpkı dün gece otobüs durağında, zamanı ve insanları durdurup beni kendi yörüngene hapsettiğin gibi. Artık merkezim sensin.
           </p>
           <canvas id="gravityCanvas"></canvas>
-          <p class="gravity-hint">DOKUN · TIKLAT · HİSSET</p>
+          <p class="gravity-hint">FAREYLE YAKLAŞ · YÖRÜNGEYİ HİSSET</p>
         </div>
       </div>
     </div>
@@ -622,7 +622,7 @@
 /* ═══════════════════════════════════════════════════════════════════
    DEVELOPER CONFIG — sadece bu satırı değiştir
    ═══════════════════════════════════════════════════════════════════ */
-const targetDate = new Date("2026-04-04T12:00:00").getTime();
+const targetDate = new Date("2026-03-04T12:00:00").getTime();
 
 /* ───────────────────────────────────────────────────────────────── */
 
@@ -758,16 +758,18 @@ function toggleCard(card) {
   }
 }
 
-/* ═══ KART 1 — OLASILIK SİMÜLATÖRÜ ══════════════════════════════════ */
-let probState = "idle"; // idle | running | final
+/* ═══ KART 1 — İKİ RUH SİMÜLATÖRÜ ══════════════════════════════════ */
 let probRaf;
-let dots = [];
+let soulParticles = [];
+let soul1, soul2;
+let soulMet = false;
+let burstParticles = [];
+let pulseT = 0;
 
 function initProbabilityCanvas() {
   const canvas = document.getElementById("probabilityCanvas");
   resizeCanvas(canvas);
-  if (probState === "idle") drawProbIdle(canvas);
-  if (probState === "final") drawProbFinal(canvas, true);
+  startSoulSimulation(canvas);
 }
 
 function resizeCanvas(canvas) {
@@ -778,213 +780,406 @@ function resizeCanvas(canvas) {
   ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
 }
 
-function drawProbIdle(canvas) {
+function startSoulSimulation(canvas) {
   const ctx = canvas.getContext("2d");
   const W = canvas.clientWidth, H = canvas.clientHeight;
-  ctx.clearRect(0, 0, W, H);
+  cancelAnimationFrame(probRaf);
+  soulMet = false;
+  burstParticles = [];
+  pulseT = 0;
 
-  const count = Math.floor(W * H / 700);
-  dots = Array.from({ length: count }, () => ({
+  const NEAR_ZONE        = Math.min(W, H) * 0.22;  // yakın geçiş mesafesi
+  const MERGE_ZONE       = 8;
+  const REQUIRED_MISSES  = 3;                        // kaç kez yakından geçecek
+
+  let nearMissCount    = 0;
+  let nearMissCooldown = 0;   // aynı geçişin tekrar sayılmaması için bekleme
+  let missFlash        = 0;   // yakın geçişte görsel tepki
+  let mergeT = 0, mergeX, mergeY;
+
+  // Kalabalık (crowd particles)
+  soulParticles = Array.from({ length: 200 }, () => ({
     x: Math.random() * W,
     y: Math.random() * H,
-    vx: (Math.random() - .5) * .4,
-    vy: (Math.random() - .5) * .4,
-    special: false,
-    opacity: Math.random() * .4 + .15,
+    vx: (Math.random() - 0.5) * 0.45,
+    vy: (Math.random() - 0.5) * 0.45,
+    r: Math.random() * 1.1 + 0.3,
+    opacity: Math.random() * 0.22 + 0.06,
   }));
+
+  // Ruh A — ben (mavi-gümüş), sol taraftan gelir
+  soul1 = {
+    x: W * 0.06,
+    y: H * 0.15 + Math.random() * H * 0.7,
+    vx: 0.9 + Math.random() * 0.3,
+    vy: (Math.random() - 0.5) * 0.5,
+  };
+  // Ruh B — sen (altın-gül), sağ taraftan gelir
+  soul2 = {
+    x: W * 0.94,
+    y: H * 0.15 + Math.random() * H * 0.7,
+    vx: -(0.9 + Math.random() * 0.3),
+    vy: (Math.random() - 0.5) * 0.5,
+  };
+
+  // Sınır çarpması — sert değil, yumuşak yansıma
+  function applyBounds(s) {
+    const m = 12;
+    if (s.x < m)     { s.x = m;     s.vx =  Math.abs(s.vx) * 0.7; }
+    if (s.x > W - m) { s.x = W - m; s.vx = -Math.abs(s.vx) * 0.7; }
+    if (s.y < m)     { s.y = m;     s.vy =  Math.abs(s.vy) * 0.7; }
+    if (s.y > H - m) { s.y = H - m; s.vy = -Math.abs(s.vy) * 0.7; }
+  }
+
+  // Hız sınırı
+  function clampSpeed(s, max) {
+    const sp = Math.hypot(s.vx, s.vy);
+    if (sp > max) { s.vx *= max / sp; s.vy *= max / sp; }
+  }
+
+  function doMerge() {
+    soulMet = true;
+    mergeX = (soul1.x + soul2.x) / 2;
+    mergeY = (soul1.y + soul2.y) / 2;
+    burstParticles = Array.from({ length: 55 }, () => {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 2.8 + 0.4;
+      return {
+        x: mergeX, y: mergeY,
+        vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+        r: Math.random() * 2 + 0.7, opacity: 1,
+        hue: Math.random() < 0.5 ? "220,190,130" : "200,220,255",
+      };
+    });
+  }
 
   function animate() {
     ctx.clearRect(0, 0, W, H);
-    dots.forEach(d => {
-      d.x += d.vx; d.y += d.vy;
-      if (d.x < 0 || d.x > W) d.vx *= -1;
-      if (d.y < 0 || d.y > H) d.vy *= -1;
+
+    // Kalabalık
+    soulParticles.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0 || p.x > W) p.vx *= -1;
+      if (p.y < 0 || p.y > H) p.vy *= -1;
       ctx.beginPath();
-      ctx.arc(d.x, d.y, 1.5, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(180,180,200,${d.opacity})`;
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(170,175,195,${p.opacity})`;
       ctx.fill();
     });
-    if (probState === "idle") probRaf = requestAnimationFrame(animate);
+
+    if (!soulMet) {
+      pulseT += 0.04;
+      if (nearMissCooldown > 0) nearMissCooldown--;
+      if (missFlash   > 0) missFlash--;
+
+      const dx   = soul2.x - soul1.x;
+      const dy   = soul2.y - soul1.y;
+      const dist = Math.hypot(dx, dy);
+
+      // Sıfır mesafe koruması
+      if (dist < 1) { doMerge(); probRaf = requestAnimationFrame(animate); return; }
+
+      const ndx = dx / dist;   // birim vektör (s1→s2)
+      const ndy = dy / dist;
+
+      const canMerge = nearMissCount >= REQUIRED_MISSES;
+
+      /* ── YAKIN GEÇİŞ MEKANİĞİ ────────────────────────────── */
+      if (!canMerge && dist < NEAR_ZONE && nearMissCooldown === 0) {
+        nearMissCount++;
+        nearMissCooldown = 200;   // ~3.3 sn bekleme (60fps'de)
+        missFlash = 18;
+
+        // Dik kuvvet: birbirinin yanından kaydırır (sağa/sola rastgele)
+        const perpX = -ndy;
+        const perpY =  ndx;
+        const sign  = Math.random() < 0.5 ? 1 : -1;
+        const push  = 1.4 + Math.random() * 0.6;
+
+        soul1.vx += perpX * sign * push  - ndx * 0.4;
+        soul1.vy += perpY * sign * push  - ndy * 0.4;
+        soul2.vx -= perpX * sign * push  + ndx * 0.4;
+        soul2.vy -= perpY * sign * push  + ndy * 0.4;
+      }
+
+      /* ── ÇEKİM KUVVETİ ────────────────────────────────────── */
+      // Her yakın geçişten sonra biraz güçlenir; son geçişte tam güç
+      let attract;
+      if (canMerge) {
+        attract = 0.009 + (1 - Math.min(dist, W) / W) * 0.016;
+      } else {
+        // Başlangıçta çok zayıf, her geçişle hafifçe artar
+        attract = 0.0008 + nearMissCount * 0.0006;
+      }
+
+      soul1.vx += ndx * attract;
+      soul1.vy += ndy * attract;
+      soul2.vx -= ndx * attract;
+      soul2.vy -= ndy * attract;
+
+      /* ── RASTGELE SÜRÜKLEME ────────────────────────────────── */
+      // Kalabalıkta sürükleniyor gibi hissettirmek için
+      const wander = canMerge ? 0.008 : 0.055;
+      soul1.vx += (Math.random() - 0.5) * wander;
+      soul1.vy += (Math.random() - 0.5) * wander;
+      soul2.vx += (Math.random() - 0.5) * wander;
+      soul2.vy += (Math.random() - 0.5) * wander;
+
+      /* ── HIZ SINIRI + SÖNÜMLEME ───────────────────────────── */
+      const maxSpd = canMerge ? 2.2 : 1.5;
+      clampSpeed(soul1, maxSpd);
+      clampSpeed(soul2, maxSpd);
+      const damp = canMerge ? 0.97 : 0.985;
+      soul1.vx *= damp; soul1.vy *= damp;
+      soul2.vx *= damp; soul2.vy *= damp;
+
+      soul1.x += soul1.vx; soul1.y += soul1.vy;
+      soul2.x += soul2.vx; soul2.y += soul2.vy;
+      applyBounds(soul1); applyBounds(soul2);
+
+      // NaN koruması
+      if (!isFinite(soul1.x)||!isFinite(soul1.y)){soul1.x=W*0.2;soul1.y=H*0.5;soul1.vx=0;soul1.vy=0;}
+      if (!isFinite(soul2.x)||!isFinite(soul2.y)){soul2.x=W*0.8;soul2.y=H*0.5;soul2.vx=0;soul2.vy=0;}
+
+      /* ── GÖRÜNMEZ BAĞ: her geçişte biraz daha parlak ─────── */
+      if (dist > 20) {
+        const baseAlpha = 0.018 + nearMissCount * 0.018;
+        const pulseAlpha = baseAlpha + Math.sin(pulseT) * 0.015;
+        ctx.beginPath();
+        ctx.moveTo(soul1.x, soul1.y);
+        ctx.lineTo(soul2.x, soul2.y);
+        ctx.strokeStyle = `rgba(201,168,76,${Math.min(0.18, pulseAlpha).toFixed(3)})`;
+        ctx.lineWidth = 0.6;
+        ctx.setLineDash([4, 9]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Yakın geçiş flash: kısa süre daha parlak hale
+      const flashBoost = missFlash > 0 ? missFlash / 18 * 0.3 : 0;
+
+      /* ── RUH A (mavi-gümüş) ───────────────────────────────── */
+      if (isFinite(soul1.x) && isFinite(soul1.y)) {
+        const aura = 14 + flashBoost * 10;
+        const g1 = ctx.createRadialGradient(soul1.x, soul1.y, 0, soul1.x, soul1.y, aura);
+        g1.addColorStop(0, `rgba(160,210,255,${0.45 + flashBoost})`);
+        g1.addColorStop(1, "rgba(160,210,255,0)");
+        ctx.fillStyle = g1;
+        ctx.beginPath(); ctx.arc(soul1.x, soul1.y, aura, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(soul1.x, soul1.y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(200,225,255,0.95)"; ctx.fill();
+      }
+
+      /* ── RUH B (altın-gül) ────────────────────────────────── */
+      if (isFinite(soul2.x) && isFinite(soul2.y)) {
+        const aura = 14 + flashBoost * 10;
+        const g2 = ctx.createRadialGradient(soul2.x, soul2.y, 0, soul2.x, soul2.y, aura);
+        g2.addColorStop(0, `rgba(220,160,110,${0.45 + flashBoost})`);
+        g2.addColorStop(1, "rgba(220,160,110,0)");
+        ctx.fillStyle = g2;
+        ctx.beginPath(); ctx.arc(soul2.x, soul2.y, aura, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(soul2.x, soul2.y, 3.5, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(240,200,150,0.95)"; ctx.fill();
+      }
+
+      /* ── BİRLEŞME KONTROLÜ (sadece yeterli yakın geçiş sonrası) */
+      if (canMerge && dist < MERGE_ZONE) doMerge();
+
+    } else {
+      /* ── BİRLEŞME ANİMASYONU ──────────────────────────────── */
+      mergeT += 0.018;
+
+      soulParticles.forEach(p => {
+        p.x += p.vx; p.y += p.vy;
+        if (p.x < 0 || p.x > W) p.vx *= -1;
+        if (p.y < 0 || p.y > H) p.vy *= -1;
+      });
+
+      const glow = 30 + Math.sin(mergeT * 2.5) * 10;
+      if (isFinite(mergeX) && isFinite(mergeY)) {
+        const bigGlow = ctx.createRadialGradient(mergeX, mergeY, 0, mergeX, mergeY, glow * 2.5);
+        bigGlow.addColorStop(0,   "rgba(240,215,140,0.55)");
+        bigGlow.addColorStop(0.4, "rgba(200,100,100,0.25)");
+        bigGlow.addColorStop(1,   "rgba(0,0,0,0)");
+        ctx.fillStyle = bigGlow;
+        ctx.beginPath(); ctx.arc(mergeX, mergeY, glow * 2.5, 0, Math.PI * 2); ctx.fill();
+      }
+
+      burstParticles = burstParticles.filter(p => {
+        p.x += p.vx; p.y += p.vy;
+        p.vx *= 0.96; p.vy *= 0.96;
+        p.opacity -= 0.010;
+        if (p.opacity <= 0) return false;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${p.hue},${p.opacity.toFixed(2)})`; ctx.fill();
+        return true;
+      });
+
+      if (isFinite(mergeX) && isFinite(mergeY)) {
+        ctx.beginPath();
+        ctx.arc(mergeX, mergeY, 5.5 + Math.sin(mergeT * 3) * 1.5, 0, Math.PI * 2);
+        const mg = ctx.createRadialGradient(mergeX, mergeY, 0, mergeX, mergeY, 6);
+        mg.addColorStop(0,   "rgba(255,240,180,1)");
+        mg.addColorStop(0.5, "rgba(220,140,120,0.9)");
+        mg.addColorStop(1,   "rgba(160,200,255,0.7)");
+        ctx.fillStyle = mg; ctx.fill();
+      }
+    }
+
+    probRaf = requestAnimationFrame(animate);
   }
-  cancelAnimationFrame(probRaf);
-  probState = "idle";
   animate();
 }
 
 function runProbability(e) {
   e.stopPropagation();
   const canvas = document.getElementById("probabilityCanvas");
-  const ctx = canvas.getContext("2d");
-  const W = canvas.clientWidth, H = canvas.clientHeight;
   cancelAnimationFrame(probRaf);
-  probState = "running";
-
-  const cx = W / 2, cy = H / 2;
-  const count = Math.floor(W * H / 700);
-
-  dots = Array.from({ length: count + 2 }, (_, i) => {
-    if (i === 0) return { x: Math.random() * W * .3 + W * .1, y: Math.random() * H, vx: .3, vy: (Math.random()-.5)*.2, special: "red",  opacity: 1, r: 4 };
-    if (i === 1) return { x: Math.random() * W * .3 + W * .6, y: Math.random() * H, vx:-.3, vy: (Math.random()-.5)*.2, special: "blue", opacity: 1, r: 4 };
-    return {
-      x: Math.random() * W, y: Math.random() * H,
-      vx: (Math.random() - .5) * .4, vy: (Math.random() - .5) * .4,
-      special: false, opacity: Math.random() * .4 + .15,
-    };
-  });
-
-  let fadeOut = 0;
-  let merged  = false;
-  let mergeT  = 0;
-
-  function animate() {
-    ctx.clearRect(0, 0, W, H);
-
-    const red  = dots.find(d => d.special === "red");
-    const blue = dots.find(d => d.special === "blue");
-    const dist = red && blue ? Math.hypot(red.x - blue.x, red.y - blue.y) : 999;
-
-    if (!merged && dist < 12) {
-      merged = true;
-    }
-
-    if (!merged) {
-      // fade out grey dots
-      fadeOut = Math.min(1, fadeOut + .008);
-      dots.forEach((d, idx) => {
-        if (!d.special) {
-          d.x += d.vx; d.y += d.vy;
-          if (d.x < 0 || d.x > W) d.vx *= -1;
-          if (d.y < 0 || d.y > H) d.vy *= -1;
-          const o = d.opacity * (1 - fadeOut);
-          if (o > .01) {
-            ctx.beginPath();
-            ctx.arc(d.x, d.y, 1.5, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(180,180,200,${o.toFixed(2)})`;
-            ctx.fill();
-          }
-        } else {
-          d.x += d.vx; d.y += d.vy;
-          if (d.x < 0 || d.x > W) d.vx *= -1;
-          if (d.y < 0 || d.y > H) d.vy *= -1;
-        }
-      });
-      // draw specials
-      if (red) {
-        ctx.beginPath(); ctx.arc(red.x, red.y, red.r, 0, Math.PI*2);
-        ctx.fillStyle = `rgba(200,40,60,${red.opacity})`; ctx.fill();
-        ctx.shadowBlur = 12; ctx.shadowColor = "rgba(200,40,60,.6)"; ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-      if (blue) {
-        ctx.beginPath(); ctx.arc(blue.x, blue.y, blue.r, 0, Math.PI*2);
-        ctx.fillStyle = `rgba(30,60,140,${blue.opacity})`; ctx.fill();
-        ctx.shadowBlur = 12; ctx.shadowColor = "rgba(80,120,220,.6)"; ctx.fill();
-        ctx.shadowBlur = 0;
-      }
-      probRaf = requestAnimationFrame(animate);
-    } else {
-      mergeT += .02;
-      const mx = red.x + (blue.x - red.x) * .5;
-      const my = red.y + (blue.y - red.y) * .5;
-      const glow = Math.sin(mergeT * 3) * 10 + 20;
-      ctx.beginPath();
-      ctx.arc(mx, my, 6 + Math.sin(mergeT*2)*2, 0, Math.PI*2);
-      const grad = ctx.createRadialGradient(mx, my, 0, mx, my, glow*2);
-      grad.addColorStop(0,  "rgba(240,200,80,1)");
-      grad.addColorStop(.4, "rgba(200,60,80,.8)");
-      grad.addColorStop(1,  "rgba(30,50,120,0)");
-      ctx.fillStyle = grad;
-      ctx.shadowBlur = glow; ctx.shadowColor = "rgba(240,200,80,.8)";
-      ctx.fill(); ctx.shadowBlur = 0;
-
-      if (mergeT < 4) probRaf = requestAnimationFrame(animate);
-      else { probState = "final"; }
-    }
-  }
-  animate();
+  startSoulSimulation(canvas);
 }
 
-/* ═══ KART 2 — KÜTLE ÇEKİM DALGALARI ════════════════════════════════ */
-let ripples = [];
+/* ═══ KART 2 — YÖRÜNGE SİMÜLATÖRÜ ══════════════════════════════════ */
 let gravRaf;
+let orbitAngle = 0;
+let orbitTrail = [];
+let orbitMouseX = -999, orbitMouseY = -999;
 
 function initGravityCanvas() {
   const canvas = document.getElementById("gravityCanvas");
   if (!canvas) return;
   resizeCanvas(canvas);
-  canvas.addEventListener("click",     createRipple);
-  canvas.addEventListener("touchstart", e => {
+  orbitTrail = [];
+  orbitAngle = 0;
+
+  canvas.addEventListener("mousemove", e => {
+    const r = canvas.getBoundingClientRect();
+    orbitMouseX = (e.clientX - r.left) / r.width  * canvas.clientWidth;
+    orbitMouseY = (e.clientY - r.top)  / r.height * canvas.clientHeight;
+  });
+  canvas.addEventListener("mouseleave", () => {
+    orbitMouseX = -999; orbitMouseY = -999;
+  });
+  canvas.addEventListener("touchmove", e => {
     e.preventDefault();
     const r = canvas.getBoundingClientRect();
     const t = e.touches[0];
-    const x = (t.clientX - r.left) / r.width  * canvas.clientWidth;
-    const y = (t.clientY - r.top)  / r.height * canvas.clientHeight;
-    addRippleAt(canvas, x, y);
+    orbitMouseX = (t.clientX - r.left) / r.width  * canvas.clientWidth;
+    orbitMouseY = (t.clientY - r.top)  / r.height * canvas.clientHeight;
   }, { passive: false });
-  drawGravity(canvas);
+  canvas.addEventListener("touchend", () => {
+    orbitMouseX = -999; orbitMouseY = -999;
+  });
+
+  drawOrbital(canvas);
 }
 
-function createRipple(e) {
-  const canvas = e.currentTarget;
-  const r = canvas.getBoundingClientRect();
-  const x = (e.clientX - r.left) / r.width  * canvas.clientWidth;
-  const y = (e.clientY - r.top)  / r.height * canvas.clientHeight;
-  addRippleAt(canvas, x, y);
-}
-
-function addRippleAt(canvas, x, y) {
-  ripples.push({ x, y, r: 0, maxR: Math.max(canvas.clientWidth, canvas.clientHeight) * 1.2, t: 0 });
-  ripples.push({ x, y, r: 0, maxR: Math.max(canvas.clientWidth, canvas.clientHeight) * .7, t: 0.15, delay: .15 });
-}
-
-function drawGravity(canvas) {
+function drawOrbital(canvas) {
   const ctx = canvas.getContext("2d");
   const W = canvas.clientWidth, H = canvas.clientHeight;
+  const cx = W / 2, cy = H / 2;
+  const baseRadius = Math.min(W * 0.32, H * 0.62);
+
+  let orbitX = cx + baseRadius, orbitY = cy;
+  let velX = 0, velY = 0;
+  let dustParticles = Array.from({ length: 60 }, () => ({
+    angle: Math.random() * Math.PI * 2,
+    dist:  baseRadius * (0.85 + Math.random() * 0.35),
+    speed: (Math.random() * 0.004 + 0.001) * (Math.random() < 0.5 ? 1 : -1),
+    r:     Math.random() * 0.8 + 0.3,
+    opacity: Math.random() * 0.12 + 0.04,
+  }));
+
+  cancelAnimationFrame(gravRaf);
 
   function animate() {
     ctx.clearRect(0, 0, W, H);
 
-    // ambient glow background
-    const bgG = ctx.createRadialGradient(W*.5, H*.5, 0, W*.5, H*.5, Math.max(W,H)*.7);
-    bgG.addColorStop(0,  "rgba(107,26,42,.08)");
-    bgG.addColorStop(1,  "rgba(0,0,0,0)");
-    ctx.fillStyle = bgG; ctx.fillRect(0, 0, W, H);
+    // Toz parçacıkları (yörünge halkası)
+    dustParticles.forEach(p => {
+      p.angle += p.speed;
+      const px = cx + Math.cos(p.angle) * p.dist * 1.35;
+      const py = cy + Math.sin(p.angle) * p.dist * 0.55;
+      ctx.beginPath(); ctx.arc(px, py, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(201,168,76,${p.opacity})`; ctx.fill();
+    });
 
-    // draw hint text if no ripples
-    if (ripples.length === 0) {
-      ctx.fillStyle = "rgba(201,168,76,.12)";
-      ctx.font = "14px 'EB Garamond'";
-      ctx.textAlign = "center";
-      ctx.fillText("✦", W/2, H/2);
+    // Merkez cisme ait derin parlaklık (o)
+    const centerAura = ctx.createRadialGradient(cx, cy, 0, cx, cy, 72);
+    centerAura.addColorStop(0,   "rgba(201,168,76,0.22)");
+    centerAura.addColorStop(0.35,"rgba(139,35,64,0.12)");
+    centerAura.addColorStop(1,   "rgba(0,0,0,0)");
+    ctx.fillStyle = centerAura;
+    ctx.beginPath(); ctx.arc(cx, cy, 72, 0, Math.PI * 2); ctx.fill();
+
+    // Merkez cisim (sen)
+    const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, 11);
+    cg.addColorStop(0,   "rgba(255,245,200,1)");
+    cg.addColorStop(0.45,"rgba(201,168,76,1)");
+    cg.addColorStop(1,   "rgba(139,35,64,0.85)");
+    ctx.beginPath(); ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+    ctx.fillStyle = cg; ctx.fill();
+
+    // Mouse pertürbasyon
+    let pertX = 0, pertY = 0;
+    if (orbitMouseX !== -999) {
+      const mdx = orbitMouseX - cx;
+      const mdy = orbitMouseY - cy;
+      const mdist = Math.hypot(mdx, mdy);
+      if (mdist < 150 && mdist > 1) {
+        const strength = (1 - mdist / 150) * 0.55;
+        pertX = (mdx / mdist) * strength;
+        pertY = (mdy / mdist) * strength;
+      }
     }
 
-    ripples = ripples.filter(rip => {
-      if (rip.delay && rip.delay > 0) { rip.delay -= .016; return true; }
-      rip.r += 3.5;
-      rip.t  += .016;
-      const prog = rip.r / rip.maxR;
-      const opacity = (1 - prog) * .7;
-      if (opacity <= 0) return false;
+    // Yörünge hareketi (eliptik)
+    orbitAngle += 0.013;
+    const targetX = cx + Math.cos(orbitAngle) * baseRadius * 1.35 + pertX * 8;
+    const targetY = cy + Math.sin(orbitAngle) * baseRadius * 0.55 + pertY * 8;
+    velX += (targetX - orbitX) * 0.045 + pertX * 0.3;
+    velY += (targetY - orbitY) * 0.045 + pertY * 0.3;
+    velX *= 0.88; velY *= 0.88;
+    orbitX += velX; orbitY += velY;
 
-      ctx.beginPath();
-      ctx.arc(rip.x, rip.y, rip.r, 0, Math.PI*2);
-      ctx.strokeStyle = `rgba(201,168,76,${opacity.toFixed(2)})`;
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+    // NaN koruması — patlama olursa sıfırla
+    if (!isFinite(orbitX) || !isFinite(orbitY)) {
+      orbitX = cx + baseRadius; orbitY = cy; velX = 0; velY = 0; orbitTrail = [];
+    }
 
-      // heart at source
-      if (prog < .3) {
-        ctx.beginPath();
-        ctx.arc(rip.x, rip.y, 4 * (1 - prog * 3), 0, Math.PI*2);
-        ctx.fillStyle = `rgba(200,60,80,${(1 - prog*3).toFixed(2)})`;
-        ctx.fill();
-      }
-      return true;
-    });
+    // Çekim ipliği (görünmez bağ)
+    const threadAlpha = 0.06 + Math.sin(orbitAngle * 3) * 0.03;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(orbitX, orbitY);
+    ctx.strokeStyle = `rgba(201,168,76,${threadAlpha.toFixed(3)})`;
+    ctx.lineWidth = 0.5; ctx.setLineDash([3,7]); ctx.stroke(); ctx.setLineDash([]);
+
+    // İz (trail)
+    orbitTrail.push({ x: orbitX, y: orbitY });
+    if (orbitTrail.length > 90) orbitTrail.shift();
+    for (let i = 0; i < orbitTrail.length - 1; i++) {
+      const p = orbitTrail[i];
+      if (!isFinite(p.x) || !isFinite(p.y)) continue;
+      const prog = i / orbitTrail.length;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 1.1, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(201,168,76,${(prog * 0.4).toFixed(3)})`; ctx.fill();
+    }
+
+    // Yörüngedeki cisim parlaklığı + cisim (ben)
+    if (isFinite(orbitX) && isFinite(orbitY)) {
+      const bodyAura = ctx.createRadialGradient(orbitX, orbitY, 0, orbitX, orbitY, 16);
+      bodyAura.addColorStop(0, "rgba(160,210,255,0.38)");
+      bodyAura.addColorStop(1, "rgba(160,210,255,0)");
+      ctx.fillStyle = bodyAura;
+      ctx.beginPath(); ctx.arc(orbitX, orbitY, 16, 0, Math.PI * 2); ctx.fill();
+
+      const bg = ctx.createRadialGradient(orbitX, orbitY, 0, orbitX, orbitY, 5);
+      bg.addColorStop(0, "rgba(220,235,255,1)");
+      bg.addColorStop(1, "rgba(100,155,240,0.85)");
+      ctx.beginPath(); ctx.arc(orbitX, orbitY, 5, 0, Math.PI * 2);
+      ctx.fillStyle = bg; ctx.fill();
+    }
 
     gravRaf = requestAnimationFrame(animate);
   }
-  cancelAnimationFrame(gravRaf);
   animate();
 }
 
